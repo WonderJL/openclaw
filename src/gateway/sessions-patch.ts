@@ -4,15 +4,18 @@ import type { OpenClawConfig } from "../config/config.js";
 import type { SessionEntry } from "../config/sessions.js";
 import { resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { resolveAllowedModelRef, resolveDefaultModelForAgent } from "../agents/model-selection.js";
+import {
+  formatAllowedThinkingLevelsForModel,
+  isThinkingLevelAllowedForModel,
+  resolveDefaultThinkingLevelForModel,
+} from "../agents/model-thinking-levels.js";
 import { normalizeGroupActivation } from "../auto-reply/group-activation.js";
 import {
-  formatThinkingLevels,
-  formatXHighModelHint,
+  type ThinkLevel,
   normalizeElevatedLevel,
   normalizeReasoningLevel,
   normalizeThinkLevel,
   normalizeUsageDisplay,
-  supportsXHighThinking,
 } from "../auto-reply/thinking.js";
 import {
   isSubagentSessionKey,
@@ -121,6 +124,8 @@ export async function applySessionsPatchToStore(params: {
     }
   }
 
+  let modelCatalog: ModelCatalogEntry[] | undefined;
+
   if ("thinkingLevel" in patch) {
     const raw = patch.thinkingLevel;
     if (raw === null) {
@@ -131,7 +136,12 @@ export async function applySessionsPatchToStore(params: {
         const hintProvider = existing?.providerOverride?.trim() || resolvedDefault.provider;
         const hintModel = existing?.modelOverride?.trim() || resolvedDefault.model;
         return invalid(
-          `invalid thinkingLevel (use ${formatThinkingLevels(hintProvider, hintModel, "|")})`,
+          `invalid thinkingLevel (use ${formatAllowedThinkingLevelsForModel({
+            cfg,
+            provider: hintProvider,
+            model: hintModel,
+            separator: "|",
+          })})`,
         );
       }
       if (normalized === "off") {
@@ -273,10 +283,10 @@ export async function applySessionsPatchToStore(params: {
           error: errorShape(ErrorCodes.UNAVAILABLE, "model catalog unavailable"),
         };
       }
-      const catalog = await params.loadGatewayModelCatalog();
+      modelCatalog = await params.loadGatewayModelCatalog();
       const resolved = resolveAllowedModelRef({
         cfg,
-        catalog,
+        catalog: modelCatalog,
         raw: trimmed,
         defaultProvider: resolvedDefault.provider,
         defaultModel: resolvedDefault.model,
@@ -298,14 +308,42 @@ export async function applySessionsPatchToStore(params: {
     }
   }
 
-  if (next.thinkingLevel === "xhigh") {
-    const effectiveProvider = next.providerOverride ?? resolvedDefault.provider;
-    const effectiveModel = next.modelOverride ?? resolvedDefault.model;
-    if (!supportsXHighThinking(effectiveProvider, effectiveModel)) {
-      if ("thinkingLevel" in patch) {
-        return invalid(`thinkingLevel "xhigh" is only supported for ${formatXHighModelHint()}`);
-      }
-      next.thinkingLevel = "high";
+  const effectiveProvider = next.providerOverride ?? resolvedDefault.provider;
+  const effectiveModel = next.modelOverride ?? resolvedDefault.model;
+  const thinkingLevel = next.thinkingLevel as ThinkLevel | undefined;
+  const explicitThinkingPatch = "thinkingLevel" in patch && patch.thinkingLevel !== undefined;
+  if (
+    thinkingLevel &&
+    !isThinkingLevelAllowedForModel({
+      cfg,
+      provider: effectiveProvider,
+      model: effectiveModel,
+      thinkingLevel,
+      catalog: modelCatalog,
+    })
+  ) {
+    const validLevels = formatAllowedThinkingLevelsForModel({
+      cfg,
+      provider: effectiveProvider,
+      model: effectiveModel,
+      catalog: modelCatalog,
+      separator: "|",
+    });
+    if (explicitThinkingPatch) {
+      return invalid(
+        `invalid thinkingLevel for ${effectiveProvider}/${effectiveModel} (use ${validLevels})`,
+      );
+    }
+    const fallback = resolveDefaultThinkingLevelForModel({
+      cfg,
+      provider: effectiveProvider,
+      model: effectiveModel,
+      catalog: modelCatalog,
+    });
+    if (fallback === "off") {
+      delete next.thinkingLevel;
+    } else {
+      next.thinkingLevel = fallback;
     }
   }
 

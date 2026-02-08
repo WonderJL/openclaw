@@ -1,3 +1,5 @@
+import type { ThinkLevel } from "../auto-reply/thinking.js";
+
 export type ModelApi =
   | "openai-completions"
   | "openai-responses"
@@ -20,6 +22,7 @@ export type ModelDefinitionConfig = {
   name: string;
   api?: ModelApi;
   reasoning: boolean;
+  thinkingLevels?: ThinkLevel[];
   input: Array<"text" | "image">;
   cost: {
     input: number;

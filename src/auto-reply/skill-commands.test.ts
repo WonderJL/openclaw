@@ -96,4 +96,33 @@ describe("listSkillCommandsForAgents", () => {
     expect(names).toContain("demo_skill_2");
     expect(names).toContain("extra_skill");
   });
+
+  it("adds gateway-<provider> command specs for configured providers", () => {
+    const commands = listSkillCommandsForAgents({
+      cfg: {
+        models: {
+          providers: {
+            openai: {
+              baseUrl: "https://api.openai.com/v1",
+              models: [],
+            },
+            "z.ai": {
+              baseUrl: "https://api.z.ai/v1",
+              models: [],
+            },
+          },
+        },
+      },
+    });
+    const names = commands.map((entry) => entry.name);
+    expect(names.some((entry) => entry.startsWith("gateway-openai"))).toBe(true);
+    expect(names.some((entry) => entry.startsWith("gateway-z-ai"))).toBe(true);
+
+    const openaiCommand = commands.find((entry) => entry.skillName === "gateway-openai");
+    expect(openaiCommand?.dispatch).toEqual({
+      kind: "tool",
+      toolName: "gateway_switch",
+      argMode: "raw",
+    });
+  });
 });

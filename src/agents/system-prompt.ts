@@ -235,6 +235,8 @@ export function buildAgentSystemPrompt(params: {
     cron: "Manage cron jobs and wake events (use for reminders; when scheduling a reminder, write the systemEvent text as something that will read like a reminder when it fires, and mention that it is a reminder depending on the time gap between setting and firing; include recent context in reminder text if appropriate)",
     message: "Send messages and channel actions",
     gateway: "Restart, apply config, or run updates on the running OpenClaw process",
+    gateway_switch:
+      "Switch current session gateway/model/reasoning defaults via gateway-<provider> skill commands",
     agents_list: "List agent ids allowed for sessions_spawn",
     sessions_list: "List other sessions (incl. sub-agents) with filters/last",
     sessions_history: "Fetch history for another session/sub-agent",
@@ -263,6 +265,7 @@ export function buildAgentSystemPrompt(params: {
     "cron",
     "message",
     "gateway",
+    "gateway_switch",
     "agents_list",
     "sessions_list",
     "sessions_history",

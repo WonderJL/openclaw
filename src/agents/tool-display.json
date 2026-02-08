@@ -167,6 +167,11 @@
         "restart": { "label": "restart", "detailKeys": ["reason", "delayMs"] }
       }
     },
+    "gateway_switch": {
+      "emoji": "🧭",
+      "title": "Gateway Switch",
+      "detailKeys": ["skillName", "commandName", "command"]
+    },
     "message": {
       "emoji": "✉️",
       "title": "Message",

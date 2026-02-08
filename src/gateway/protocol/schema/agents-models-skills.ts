@@ -8,6 +8,18 @@ export const ModelChoiceSchema = Type.Object(
     provider: NonEmptyString,
     contextWindow: Type.Optional(Type.Integer({ minimum: 1 })),
     reasoning: Type.Optional(Type.Boolean()),
+    thinkingLevels: Type.Optional(
+      Type.Array(
+        Type.Union([
+          Type.Literal("off"),
+          Type.Literal("minimal"),
+          Type.Literal("low"),
+          Type.Literal("medium"),
+          Type.Literal("high"),
+          Type.Literal("xhigh"),
+        ]),
+      ),
+    ),
   },
   { additionalProperties: false },
 );

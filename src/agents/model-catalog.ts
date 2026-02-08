@@ -1,3 +1,4 @@
+import { normalizeThinkLevel, type ThinkLevel } from "../auto-reply/thinking.js";
 import { type OpenClawConfig, loadConfig } from "../config/config.js";
 import { resolveOpenClawAgentDir } from "./agent-paths.js";
 import { ensureOpenClawModelsJson } from "./models-config.js";
@@ -8,6 +9,7 @@ export type ModelCatalogEntry = {
   provider: string;
   contextWindow?: number;
   reasoning?: boolean;
+  thinkingLevels?: ThinkLevel[];
   input?: Array<"text" | "image">;
 };
 
@@ -17,6 +19,7 @@ type DiscoveredModel = {
   provider: string;
   contextWindow?: number;
   reasoning?: boolean;
+  thinkingLevels?: ThinkLevel[];
   input?: Array<"text" | "image">;
 };
 
@@ -91,8 +94,30 @@ export async function loadModelCatalog(params?: {
             ? entry.contextWindow
             : undefined;
         const reasoning = typeof entry?.reasoning === "boolean" ? entry.reasoning : undefined;
+        const normalizedThinkingLevels: ThinkLevel[] = [];
+        if (Array.isArray(entry?.thinkingLevels)) {
+          const seen = new Set<ThinkLevel>();
+          for (const rawLevel of entry.thinkingLevels) {
+            const normalizedLevel = normalizeThinkLevel(String(rawLevel ?? ""));
+            if (!normalizedLevel || seen.has(normalizedLevel)) {
+              continue;
+            }
+            seen.add(normalizedLevel);
+            normalizedThinkingLevels.push(normalizedLevel);
+          }
+        }
+        const thinkingLevels =
+          normalizedThinkingLevels.length > 0 ? normalizedThinkingLevels : undefined;
         const input = Array.isArray(entry?.input) ? entry.input : undefined;
-        models.push({ id, name, provider, contextWindow, reasoning, input });
+        models.push({
+          id,
+          name,
+          provider,
+          contextWindow,
+          reasoning,
+          thinkingLevels,
+          input,
+        });
       }
 
       if (models.length === 0) {

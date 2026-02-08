@@ -5,6 +5,9 @@ import { buildWorkspaceSkillCommandSpecs, type SkillCommandSpec } from "../agent
 import { getRemoteSkillEligibility } from "../infra/skills-remote.js";
 import { listChatCommands } from "./commands-registry.js";
 
+const GATEWAY_COMMAND_PREFIX = "gateway-";
+const GATEWAY_SWITCH_TOOL = "gateway_switch";
+
 function resolveReservedCommandNames(): Set<string> {
   const reserved = new Set<string>();
   for (const command of listChatCommands()) {
@@ -22,17 +25,78 @@ function resolveReservedCommandNames(): Set<string> {
   return reserved;
 }
 
+function sanitizeGatewayCommandSegment(raw: string): string {
+  const normalized = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || "provider";
+}
+
+function resolveUniqueCommandName(base: string, used: Set<string>): string {
+  const normalizedBase = base.toLowerCase();
+  if (!used.has(normalizedBase)) {
+    return base;
+  }
+  for (let index = 2; index < 1000; index += 1) {
+    const candidate = `${base}-${index}`;
+    const candidateKey = candidate.toLowerCase();
+    if (!used.has(candidateKey)) {
+      return candidate;
+    }
+  }
+  return `${base}-${Date.now()}`;
+}
+
+function listGatewaySkillCommands(params: {
+  cfg: OpenClawConfig;
+  usedNames: Set<string>;
+}): SkillCommandSpec[] {
+  const providerKeys = Object.keys(params.cfg.models?.providers ?? {})
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .toSorted((a, b) => a.localeCompare(b));
+  if (providerKeys.length === 0) {
+    return [];
+  }
+  const out: SkillCommandSpec[] = [];
+  for (const providerKey of providerKeys) {
+    const base = `${GATEWAY_COMMAND_PREFIX}${sanitizeGatewayCommandSegment(providerKey)}`;
+    const name = resolveUniqueCommandName(base, params.usedNames);
+    params.usedNames.add(name.toLowerCase());
+    out.push({
+      name,
+      skillName: `${GATEWAY_COMMAND_PREFIX}${providerKey}`,
+      description: `Switch current session to ${providerKey} gateway (optional: model and reasoning args).`,
+      dispatch: { kind: "tool", toolName: GATEWAY_SWITCH_TOOL, argMode: "raw" },
+    });
+  }
+  return out;
+}
+
 export function listSkillCommandsForWorkspace(params: {
   workspaceDir: string;
   cfg: OpenClawConfig;
   skillFilter?: string[];
 }): SkillCommandSpec[] {
-  return buildWorkspaceSkillCommandSpecs(params.workspaceDir, {
+  const reservedNames = resolveReservedCommandNames();
+  const commands = buildWorkspaceSkillCommandSpecs(params.workspaceDir, {
     config: params.cfg,
     skillFilter: params.skillFilter,
     eligibility: { remote: getRemoteSkillEligibility() },
-    reservedNames: resolveReservedCommandNames(),
+    reservedNames,
   });
+  const usedNames = new Set<string>([
+    ...reservedNames,
+    ...commands.map((entry) => entry.name.toLowerCase()),
+  ]);
+  const gatewayCommands = listGatewaySkillCommands({
+    cfg: params.cfg,
+    usedNames,
+  });
+  return [...commands, ...gatewayCommands];
 }
 
 export function listSkillCommandsForAgents(params: {
@@ -66,6 +130,11 @@ export function listSkillCommandsForAgents(params: {
       entries.push(command);
     }
   }
+  const gatewayCommands = listGatewaySkillCommands({
+    cfg: params.cfg,
+    usedNames: used,
+  });
+  entries.push(...gatewayCommands);
   return entries;
 }
 

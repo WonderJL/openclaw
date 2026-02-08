@@ -9,6 +9,11 @@ import type { createModelSelectionState } from "./model-selection.js";
 import type { TypingController } from "./typing.js";
 import { resolveSessionAuthProfileOverride } from "../../agents/auth-profiles/session-override.js";
 import {
+  formatAllowedThinkingLevelsForModel,
+  isThinkingLevelAllowedForModel,
+  resolveDefaultThinkingLevelForModel,
+} from "../../agents/model-thinking-levels.js";
+import {
   abortEmbeddedPiRun,
   isEmbeddedPiRunActive,
   isEmbeddedPiRunStreaming,
@@ -28,10 +33,8 @@ import { hasControlCommand } from "../command-detection.js";
 import { buildInboundMediaNote } from "../media-note.js";
 import {
   type ElevatedLevel,
-  formatXHighModelHint,
   normalizeThinkLevel,
   type ReasoningLevel,
-  supportsXHighThinking,
   type ThinkLevel,
   type VerboseLevel,
 } from "../thinking.js";
@@ -259,7 +262,15 @@ export async function runPreparedReply(
   if (!resolvedThinkLevel && prefixedCommandBody) {
     const parts = prefixedCommandBody.split(/\s+/);
     const maybeLevel = normalizeThinkLevel(parts[0]);
-    if (maybeLevel && (maybeLevel !== "xhigh" || supportsXHighThinking(provider, model))) {
+    if (
+      maybeLevel &&
+      isThinkingLevelAllowedForModel({
+        cfg,
+        provider,
+        model,
+        thinkingLevel: maybeLevel,
+      })
+    ) {
       resolvedThinkLevel = maybeLevel;
       prefixedCommandBody = parts.slice(1).join(" ").trim();
     }
@@ -267,17 +278,49 @@ export async function runPreparedReply(
   if (!resolvedThinkLevel) {
     resolvedThinkLevel = await modelState.resolveDefaultThinkingLevel();
   }
-  if (resolvedThinkLevel === "xhigh" && !supportsXHighThinking(provider, model)) {
+  if (
+    resolvedThinkLevel &&
+    !isThinkingLevelAllowedForModel({
+      cfg,
+      provider,
+      model,
+      thinkingLevel: resolvedThinkLevel,
+    })
+  ) {
     const explicitThink = directives.hasThinkDirective && directives.thinkLevel !== undefined;
+    const validLevels = formatAllowedThinkingLevelsForModel({
+      cfg,
+      provider,
+      model,
+    });
     if (explicitThink) {
       typing.cleanup();
       return {
-        text: `Thinking level "xhigh" is only supported for ${formatXHighModelHint()}. Use /think high or switch to one of those models.`,
+        text: `Thinking level "${resolvedThinkLevel}" is not allowed for ${provider}/${model}. Use /think <${validLevels}> or switch models.`,
       };
     }
-    resolvedThinkLevel = "high";
-    if (sessionEntry && sessionStore && sessionKey && sessionEntry.thinkingLevel === "xhigh") {
-      sessionEntry.thinkingLevel = "high";
+    resolvedThinkLevel = resolveDefaultThinkingLevelForModel({
+      cfg,
+      provider,
+      model,
+    });
+    if (
+      sessionEntry &&
+      sessionStore &&
+      sessionKey &&
+      sessionEntry.thinkingLevel &&
+      !isThinkingLevelAllowedForModel({
+        cfg,
+        provider,
+        model,
+        thinkingLevel: sessionEntry.thinkingLevel as ThinkLevel,
+      })
+    ) {
+      if (resolvedThinkLevel === "off") {
+        delete sessionEntry.thinkingLevel;
+      } else {
+        sessionEntry.thinkingLevel = resolvedThinkLevel;
+      }
       sessionEntry.updatedAt = Date.now();
       sessionStore[sessionKey] = sessionEntry;
       if (storePath) {

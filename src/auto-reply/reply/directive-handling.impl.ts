@@ -9,12 +9,17 @@ import {
   resolveAgentDir,
   resolveSessionAgentId,
 } from "../../agents/agent-scope.js";
+import {
+  formatAllowedThinkingLevelsForModel,
+  isThinkingLevelAllowedForModel,
+  resolveDefaultThinkingLevelForModel,
+} from "../../agents/model-thinking-levels.js";
 import { resolveSandboxRuntimeStatus } from "../../agents/sandbox.js";
 import { type SessionEntry, updateSessionStore } from "../../config/sessions.js";
 import { enqueueSystemEvent } from "../../infra/system-events.js";
 import { applyVerboseOverride } from "../../sessions/level-overrides.js";
 import { applyModelOverrideToSessionEntry } from "../../sessions/model-overrides.js";
-import { formatThinkingLevels, formatXHighModelHint, supportsXHighThinking } from "../thinking.js";
+import { formatThinkingLevels } from "../thinking.js";
 import {
   maybeHandleModelDirectiveInfo,
   resolveModelSelectionFromDirective,
@@ -158,6 +163,12 @@ export async function handleDirectiveOnly(params: {
 
   const resolvedProvider = modelSelection?.provider ?? provider;
   const resolvedModel = modelSelection?.model ?? model;
+  const allowedThinkingLabel = formatAllowedThinkingLevelsForModel({
+    cfg: params.cfg,
+    provider: resolvedProvider,
+    model: resolvedModel,
+    catalog: allowedModelCatalog,
+  });
 
   if (directives.hasThinkDirective && !directives.thinkLevel) {
     // If no argument was provided, show the current level
@@ -166,12 +177,12 @@ export async function handleDirectiveOnly(params: {
       return {
         text: withOptions(
           `Current thinking level: ${level}.`,
-          formatThinkingLevels(resolvedProvider, resolvedModel),
+          allowedThinkingLabel || formatThinkingLevels(resolvedProvider, resolvedModel),
         ),
       };
     }
     return {
-      text: `Unrecognized thinking level "${directives.rawThinkLevel}". Valid levels: ${formatThinkingLevels(resolvedProvider, resolvedModel)}.`,
+      text: `Unrecognized thinking level "${directives.rawThinkLevel}". Valid levels: ${allowedThinkingLabel || formatThinkingLevels(resolvedProvider, resolvedModel)}.`,
     };
   }
   if (directives.hasVerboseDirective && !directives.verboseLevel) {
@@ -279,21 +290,33 @@ export async function handleDirectiveOnly(params: {
 
   if (
     directives.hasThinkDirective &&
-    directives.thinkLevel === "xhigh" &&
-    !supportsXHighThinking(resolvedProvider, resolvedModel)
+    directives.thinkLevel &&
+    !isThinkingLevelAllowedForModel({
+      cfg: params.cfg,
+      provider: resolvedProvider,
+      model: resolvedModel,
+      thinkingLevel: directives.thinkLevel,
+      catalog: allowedModelCatalog,
+    })
   ) {
     return {
-      text: `Thinking level "xhigh" is only supported for ${formatXHighModelHint()}.`,
+      text: `Thinking level "${directives.thinkLevel}" is not allowed for ${resolvedProvider}/${resolvedModel}. Valid levels: ${allowedThinkingLabel}.`,
     };
   }
 
   const nextThinkLevel = directives.hasThinkDirective
     ? directives.thinkLevel
     : ((sessionEntry?.thinkingLevel as ThinkLevel | undefined) ?? currentThinkLevel);
-  const shouldDowngradeXHigh =
+  const shouldDowngradeThinking =
     !directives.hasThinkDirective &&
-    nextThinkLevel === "xhigh" &&
-    !supportsXHighThinking(resolvedProvider, resolvedModel);
+    Boolean(nextThinkLevel) &&
+    !isThinkingLevelAllowedForModel({
+      cfg: params.cfg,
+      provider: resolvedProvider,
+      model: resolvedModel,
+      thinkingLevel: nextThinkLevel,
+      catalog: allowedModelCatalog,
+    });
 
   const prevElevatedLevel =
     currentElevatedLevel ??
@@ -315,8 +338,18 @@ export async function handleDirectiveOnly(params: {
       sessionEntry.thinkingLevel = directives.thinkLevel;
     }
   }
-  if (shouldDowngradeXHigh) {
-    sessionEntry.thinkingLevel = "high";
+  if (shouldDowngradeThinking) {
+    const fallbackThinking = resolveDefaultThinkingLevelForModel({
+      cfg: params.cfg,
+      provider: resolvedProvider,
+      model: resolvedModel,
+      catalog: allowedModelCatalog,
+    });
+    if (fallbackThinking === "off") {
+      delete sessionEntry.thinkingLevel;
+    } else {
+      sessionEntry.thinkingLevel = fallbackThinking;
+    }
   }
   if (directives.hasVerboseDirective && directives.verboseLevel) {
     applyVerboseOverride(sessionEntry, directives.verboseLevel);
@@ -465,9 +498,12 @@ export async function handleDirectiveOnly(params: {
       parts.push(formatDirectiveAck(`Exec defaults set (${execParts.join(", ")}).`));
     }
   }
-  if (shouldDowngradeXHigh) {
+  if (shouldDowngradeThinking) {
+    const fallbackThinking = (sessionEntry.thinkingLevel as ThinkLevel | undefined) ?? "off";
     parts.push(
-      `Thinking level set to high (xhigh not supported for ${resolvedProvider}/${resolvedModel}).`,
+      fallbackThinking === "off"
+        ? `Thinking disabled (previous level unsupported for ${resolvedProvider}/${resolvedModel}).`
+        : `Thinking level set to ${fallbackThinking} (previous level unsupported for ${resolvedProvider}/${resolvedModel}).`,
     );
   }
   if (modelSelection) {

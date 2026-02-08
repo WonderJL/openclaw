@@ -1908,19 +1908,22 @@ public struct ModelChoice: Codable, Sendable {
     public let provider: String
     public let contextwindow: Int?
     public let reasoning: Bool?
+    public let thinkinglevels: [AnyCodable]?
 
     public init(
         id: String,
         name: String,
         provider: String,
         contextwindow: Int?,
-        reasoning: Bool?
+        reasoning: Bool?,
+        thinkinglevels: [AnyCodable]?
     ) {
         self.id = id
         self.name = name
         self.provider = provider
         self.contextwindow = contextwindow
         self.reasoning = reasoning
+        self.thinkinglevels = thinkinglevels
     }
     private enum CodingKeys: String, CodingKey {
         case id
@@ -1928,6 +1931,7 @@ public struct ModelChoice: Codable, Sendable {
         case provider
         case contextwindow = "contextWindow"
         case reasoning
+        case thinkinglevels = "thinkingLevels"
     }
 }
 

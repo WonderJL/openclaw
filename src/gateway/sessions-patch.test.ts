@@ -95,4 +95,114 @@ describe("gateway sessions patch", () => {
     expect(res.entry.authProfileOverrideSource).toBeUndefined();
     expect(res.entry.authProfileOverrideCompactionCount).toBeUndefined();
   });
+
+  test("rejects disallowed thinking levels from model policy", async () => {
+    const store: Record<string, SessionEntry> = {};
+    const res = await applySessionsPatchToStore({
+      cfg: {
+        models: {
+          providers: {
+            openai: {
+              baseUrl: "https://api.openai.com/v1",
+              models: [
+                {
+                  id: "gpt-5.2",
+                  name: "GPT-5.2",
+                  reasoning: true,
+                  thinkingLevels: ["off", "minimal"],
+                  input: ["text"],
+                  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                  contextWindow: 1,
+                  maxTokens: 1,
+                },
+              ],
+            },
+          },
+        },
+      } as OpenClawConfig,
+      store,
+      storeKey: "agent:main:main",
+      patch: { model: "openai/gpt-5.2", thinkingLevel: "high" },
+      loadGatewayModelCatalog: async () => [
+        {
+          provider: "openai",
+          id: "gpt-5.2",
+          name: "GPT-5.2",
+          thinkingLevels: ["off", "minimal"],
+        },
+      ],
+    });
+    expect(res.ok).toBe(false);
+    if (res.ok) {
+      return;
+    }
+    expect(res.error.message).toContain("invalid thinkingLevel");
+  });
+
+  test("downgrades unsupported thinking level on model switch", async () => {
+    const store: Record<string, SessionEntry> = {
+      "agent:main:main": {
+        sessionId: "sess",
+        updatedAt: 1,
+        providerOverride: "openai",
+        modelOverride: "gpt-5.2",
+        thinkingLevel: "high",
+      } as SessionEntry,
+    };
+    const res = await applySessionsPatchToStore({
+      cfg: {
+        models: {
+          providers: {
+            openai: {
+              baseUrl: "https://api.openai.com/v1",
+              models: [
+                {
+                  id: "gpt-5.2",
+                  name: "GPT-5.2",
+                  reasoning: true,
+                  thinkingLevels: ["off", "minimal"],
+                  input: ["text"],
+                  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                  contextWindow: 1,
+                  maxTokens: 1,
+                },
+                {
+                  id: "gpt-5.3",
+                  name: "GPT-5.3",
+                  reasoning: true,
+                  thinkingLevels: ["off", "minimal"],
+                  input: ["text"],
+                  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                  contextWindow: 1,
+                  maxTokens: 1,
+                },
+              ],
+            },
+          },
+        },
+      } as OpenClawConfig,
+      store,
+      storeKey: "agent:main:main",
+      patch: { model: "openai/gpt-5.3" },
+      loadGatewayModelCatalog: async () => [
+        {
+          provider: "openai",
+          id: "gpt-5.2",
+          name: "GPT-5.2",
+          thinkingLevels: ["off", "minimal"],
+        },
+        {
+          provider: "openai",
+          id: "gpt-5.3",
+          name: "GPT-5.3",
+          thinkingLevels: ["off", "minimal"],
+        },
+      ],
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) {
+      return;
+    }
+    expect(res.entry.thinkingLevel).toBe("minimal");
+  });
 });
