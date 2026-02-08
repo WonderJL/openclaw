@@ -106,10 +106,7 @@ export function applySettingsFromUrl(host: SettingsHost) {
   }
 
   if (passwordRaw != null) {
-    const password = passwordRaw.trim();
-    if (password) {
-      (host as { password: string }).password = password;
-    }
+    // Strip password params from the URL, but never import them into runtime state.
     params.delete("password");
     hashParams.delete("password");
     shouldCleanUrl = true;
