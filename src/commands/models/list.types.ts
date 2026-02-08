@@ -10,6 +10,7 @@ export type ModelRow = {
   name: string;
   input: string;
   contextWindow: number | null;
+  thinking: string;
   local: boolean | null;
   available: boolean | null;
   tags: string[];

@@ -280,4 +280,32 @@ describe("models list/status", () => {
     const payload = JSON.parse(String(runtime.log.mock.calls[0]?.[0]));
     expect(payload.models[0]?.available).toBe(false);
   });
+
+  it("models list exposes allowed thinking levels per model", async () => {
+    loadConfig.mockReturnValue({
+      agents: { defaults: { model: "openai-codex/gpt-5.2-codex" } },
+    });
+    const runtime = makeRuntime();
+
+    const model = {
+      provider: "openai-codex",
+      id: "gpt-5.2-codex",
+      name: "GPT-5.2 Codex",
+      input: ["text", "image"],
+      baseUrl: "https://api.openai.com/v1",
+      contextWindow: 266000,
+    };
+
+    modelRegistryState.models = [model];
+    modelRegistryState.available = [model];
+
+    const { modelsListCommand } = await import("./models/list.js");
+    await modelsListCommand({ all: true, json: true }, runtime);
+
+    expect(runtime.log).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(String(runtime.log.mock.calls[0]?.[0]));
+    expect(payload.models[0]?.thinking).toContain("medium");
+    expect(payload.models[0]?.thinking).toContain("high");
+    expect(payload.models[0]?.thinking).toContain("xhigh");
+  });
 });

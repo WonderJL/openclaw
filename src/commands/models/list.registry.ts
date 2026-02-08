@@ -11,6 +11,7 @@ import {
 } from "../../agents/model-auth.js";
 import { ensureOpenClawModelsJson } from "../../agents/models-config.js";
 import { discoverAuthStorage, discoverModels } from "../../agents/pi-model-discovery.js";
+import { listThinkingLevelLabels, normalizeThinkLevel } from "../../auto-reply/thinking.js";
 import { modelKey } from "./shared.js";
 
 const isLocalBaseUrl = (baseUrl: string) => {
@@ -45,6 +46,26 @@ const hasAuthForProvider = (provider: string, cfg: OpenClawConfig, authStore: Au
   return false;
 };
 
+function resolveThinkingLevels(model: Model<Api>): string[] {
+  const explicitLevels = (model as { thinkingLevels?: unknown }).thinkingLevels;
+  if (Array.isArray(explicitLevels)) {
+    const normalized: string[] = [];
+    const seen = new Set<string>();
+    for (const raw of explicitLevels) {
+      const level = normalizeThinkLevel(String(raw ?? ""));
+      if (!level || seen.has(level)) {
+        continue;
+      }
+      seen.add(level);
+      normalized.push(level);
+    }
+    if (normalized.length > 0) {
+      return normalized;
+    }
+  }
+  return listThinkingLevelLabels(model.provider, model.id);
+}
+
 export async function loadModelRegistry(cfg: OpenClawConfig) {
   await ensureOpenClawModelsJson(cfg);
   const agentDir = resolveOpenClawAgentDir();
@@ -72,6 +93,7 @@ export function toModelRow(params: {
       name: key,
       input: "-",
       contextWindow: null,
+      thinking: "-",
       local: null,
       available: null,
       tags: [...tags, "missing"],
@@ -80,6 +102,7 @@ export function toModelRow(params: {
   }
 
   const input = model.input.join("+") || "text";
+  const thinking = resolveThinkingLevels(model).join("|") || "-";
   const local = isLocalBaseUrl(model.baseUrl);
   const available =
     cfg && authStore
@@ -103,6 +126,7 @@ export function toModelRow(params: {
     name: model.name || model.id,
     input,
     contextWindow: model.contextWindow ?? null,
+    thinking,
     local,
     available,
     tags: Array.from(mergedTags),

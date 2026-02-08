@@ -7,6 +7,7 @@ import { formatTokenK } from "./shared.js";
 const MODEL_PAD = 42;
 const INPUT_PAD = 10;
 const CTX_PAD = 8;
+const THINK_PAD = 34;
 const LOCAL_PAD = 5;
 const AUTH_PAD = 5;
 
@@ -41,6 +42,7 @@ export function printModelTable(
     pad("Model", MODEL_PAD),
     pad("Input", INPUT_PAD),
     pad("Ctx", CTX_PAD),
+    pad("Think", THINK_PAD),
     pad("Local", LOCAL_PAD),
     pad("Auth", AUTH_PAD),
     "Tags",
@@ -51,6 +53,7 @@ export function printModelTable(
     const keyLabel = pad(truncate(row.key, MODEL_PAD), MODEL_PAD);
     const inputLabel = pad(row.input || "-", INPUT_PAD);
     const ctxLabel = pad(formatTokenK(row.contextWindow), CTX_PAD);
+    const thinkLabel = pad(truncate(row.thinking || "-", THINK_PAD), THINK_PAD);
     const localText = row.local === null ? "-" : row.local ? "yes" : "no";
     const localLabel = pad(localText, LOCAL_PAD);
     const authText = row.available === null ? "-" : row.available ? "yes" : "no";
@@ -82,6 +85,7 @@ export function printModelTable(
       rich ? theme.accent(keyLabel) : keyLabel,
       coloredInput,
       ctxLabel,
+      thinkLabel,
       coloredLocal,
       coloredAuth,
       tagsLabel,
