@@ -182,6 +182,7 @@ export function renderChatControls(state: AppViewState) {
               thinkingLevel: resolveThinkingPatchValue(
                 nextThinking,
                 isBinaryThinkingProviderForUi(nextProvider.label),
+                nextModel.thinkingLevels,
               ),
             });
           }}
@@ -228,6 +229,7 @@ export function renderChatControls(state: AppViewState) {
               thinkingLevel: resolveThinkingPatchValue(
                 nextThinking,
                 isBinaryThinkingProviderForUi(provider),
+                match?.thinkingLevels,
               ),
             });
           }}
@@ -255,7 +257,11 @@ export function renderChatControls(state: AppViewState) {
           @change=${(e: Event) => {
             const value = (e.target as HTMLSelectElement).value;
             void state.handleSessionsPatch(state.sessionKey, {
-              thinkingLevel: resolveThinkingPatchValue(value, isBinaryProvider),
+              thinkingLevel: resolveThinkingPatchValue(
+                value,
+                isBinaryProvider,
+                selectedModel?.thinkingLevels,
+              ),
             });
           }}
         >
@@ -385,7 +391,11 @@ function resolveThinkingDisplay(value: string | null | undefined, isBinary: bool
   return "on";
 }
 
-function resolveThinkingPatchValue(value: string, isBinary: boolean): string | null {
+function resolveThinkingPatchValue(
+  value: string,
+  isBinary: boolean,
+  thinkingLevels?: ReadonlyArray<string>,
+): string | null {
   const level = value.trim();
   if (!level || level === "off") {
     return null;
@@ -393,7 +403,21 @@ function resolveThinkingPatchValue(value: string, isBinary: boolean): string | n
   if (!isBinary) {
     return level;
   }
-  return "low";
+  return resolveBinaryEnabledThinkingLevel(thinkingLevels);
+}
+
+function resolveBinaryEnabledThinkingLevel(thinkingLevels?: ReadonlyArray<string>): string {
+  if (!Array.isArray(thinkingLevels) || thinkingLevels.length === 0) {
+    return "low";
+  }
+  const normalized = [
+    ...new Set(thinkingLevels.map((entry) => String(entry).trim()).filter(Boolean)),
+  ];
+  if (normalized.includes("low")) {
+    return "low";
+  }
+  const enabled = normalized.find((entry) => entry !== "off");
+  return enabled ?? "low";
 }
 
 function resolveDefaultThinkingOption(options: ReadonlyArray<string>): string {
