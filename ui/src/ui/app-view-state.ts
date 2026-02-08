@@ -19,6 +19,7 @@ import type {
   CronJob,
   CronRunLogEntry,
   CronStatus,
+  GatewayModelChoice,
   HealthSnapshot,
   LogEntry,
   LogLevel,
@@ -64,6 +65,9 @@ export type AppViewState = {
   chatAvatarUrl: string | null;
   chatThinkingLevel: string | null;
   chatQueue: ChatQueueItem[];
+  chatModelsLoading: boolean;
+  chatModelsError: string | null;
+  chatModels: GatewayModelChoice[];
   chatManualRefreshInFlight: boolean;
   nodesLoading: boolean;
   nodes: Array<Record<string, unknown>>;
@@ -200,7 +204,7 @@ export type AppViewState = {
   debugLoading: boolean;
   debugStatus: StatusSummary | null;
   debugHealth: HealthSnapshot | null;
-  debugModels: unknown[];
+  debugModels: GatewayModelChoice[];
   debugHeartbeat: unknown;
   debugCallMethod: string;
   debugCallParams: string;

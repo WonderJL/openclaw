@@ -13,6 +13,7 @@ import type {
   AgentsListResult,
   AgentsFilesListResult,
   AgentIdentityResult,
+  GatewayModelChoice,
   ConfigSnapshot,
   ConfigUiHints,
   CronJob,
@@ -135,6 +136,9 @@ export class OpenClawApp extends LitElement {
   @state() chatAvatarUrl: string | null = null;
   @state() chatThinkingLevel: string | null = null;
   @state() chatQueue: ChatQueueItem[] = [];
+  @state() chatModelsLoading = false;
+  @state() chatModelsError: string | null = null;
+  @state() chatModels: GatewayModelChoice[] = [];
   @state() chatAttachments: ChatAttachment[] = [];
   @state() chatManualRefreshInFlight = false;
   // Sidebar state for tool output viewing
@@ -301,7 +305,7 @@ export class OpenClawApp extends LitElement {
   @state() debugLoading = false;
   @state() debugStatus: StatusSummary | null = null;
   @state() debugHealth: HealthSnapshot | null = null;
-  @state() debugModels: unknown[] = [];
+  @state() debugModels: GatewayModelChoice[] = [];
   @state() debugHeartbeat: unknown = null;
   @state() debugCallMethod = "";
   @state() debugCallParams = "{}";

@@ -323,6 +323,19 @@ export type GatewaySessionsDefaults = {
   contextTokens: number | null;
 };
 
+export type GatewayModelChoice = {
+  id: string;
+  name: string;
+  provider: string;
+  contextWindow?: number;
+  reasoning?: boolean;
+  thinkingLevels?: Array<"off" | "minimal" | "low" | "medium" | "high" | "xhigh">;
+};
+
+export type ModelsListResult = {
+  models: GatewayModelChoice[];
+};
+
 export type GatewayAgentRow = {
   id: string;
   name?: string;

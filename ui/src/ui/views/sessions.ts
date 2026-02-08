@@ -27,6 +27,7 @@ export type SessionsProps = {
       thinkingLevel?: string | null;
       verboseLevel?: string | null;
       reasoningLevel?: string | null;
+      model?: string | null;
     },
   ) => void;
   onDelete: (key: string) => void;

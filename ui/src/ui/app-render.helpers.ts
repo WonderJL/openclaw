@@ -48,6 +48,44 @@ export function renderChatControls(state: AppViewState) {
   );
   const disableThinkingToggle = state.onboarding;
   const disableFocusToggle = state.onboarding;
+  const activeSession = state.sessionsResult?.sessions?.find((row) => row.key === state.sessionKey);
+  const providerMap = new Map<string, { label: string; models: AppViewState["chatModels"] }>();
+  for (const entry of state.chatModels) {
+    const key = normalizeProviderIdForThinking(entry.provider);
+    const existing = providerMap.get(key);
+    if (existing) {
+      existing.models.push(entry);
+    } else {
+      providerMap.set(key, { label: entry.provider, models: [entry] });
+    }
+  }
+  const providerKeys = [...providerMap.keys()].toSorted((a, b) => a.localeCompare(b));
+  const activeProviderKey = normalizeProviderIdForThinking(activeSession?.modelProvider);
+  const selectedProviderKey =
+    providerKeys.includes(activeProviderKey) && activeProviderKey
+      ? activeProviderKey
+      : (providerKeys[0] ?? "");
+  const selectedProvider = selectedProviderKey ? providerMap.get(selectedProviderKey) : undefined;
+  const modelsForProvider = (selectedProvider?.models ?? []).toSorted((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const sessionModelId =
+    activeSession?.model &&
+    normalizeProviderIdForThinking(activeSession?.modelProvider) === selectedProviderKey
+      ? activeSession.model
+      : "";
+  const selectedModel =
+    modelsForProvider.find((entry) => entry.id === sessionModelId) ?? modelsForProvider[0];
+  const selectedModelRef = selectedModel ? `${selectedModel.provider}/${selectedModel.id}` : "";
+  const isBinaryProvider = isBinaryThinkingProviderForUi(selectedProvider?.label);
+  const thinkingOptions = resolveThinkingOptionList({
+    provider: selectedProvider?.label,
+    thinkingLevels: selectedModel?.thinkingLevels,
+  });
+  const thinkingDisplay = resolveThinkingDisplay(activeSession?.thinkingLevel, isBinaryProvider);
+  const displayedThinkingOptions = withCurrentThinkingOption(thinkingOptions, thinkingDisplay);
+  const canSelectModel = state.connected && !state.chatModelsLoading && Boolean(selectedProvider);
+  const canSelectThinking = canSelectModel && Boolean(selectedModel);
   const showThinking = state.onboarding ? false : state.settings.chatShowThinking;
   const focusActive = state.onboarding ? true : state.settings.chatFocusMode;
   // Refresh icon
@@ -123,6 +161,111 @@ export function renderChatControls(state: AppViewState) {
           )}
         </select>
       </label>
+      <label class="field chat-controls__provider">
+        <select
+          .value=${selectedProviderKey}
+          ?disabled=${!state.connected || state.chatModelsLoading || providerKeys.length === 0}
+          @change=${(e: Event) => {
+            const nextProviderKey = (e.target as HTMLSelectElement).value;
+            const nextProvider = providerMap.get(nextProviderKey);
+            const nextModel = nextProvider?.models?.[0];
+            if (!nextProvider || !nextModel) {
+              return;
+            }
+            const options = resolveThinkingOptionList({
+              provider: nextProvider.label,
+              thinkingLevels: nextModel.thinkingLevels,
+            });
+            const nextThinking = resolveDefaultThinkingOption(options);
+            void state.handleSessionsPatch(state.sessionKey, {
+              model: `${nextModel.provider}/${nextModel.id}`,
+              thinkingLevel: resolveThinkingPatchValue(
+                nextThinking,
+                isBinaryThinkingProviderForUi(nextProvider.label),
+              ),
+            });
+          }}
+        >
+          ${
+            providerKeys.length === 0
+              ? html`
+                  <option value="">Gateway</option>
+                `
+              : repeat(
+                  providerKeys,
+                  (entry) => entry,
+                  (entry) =>
+                    html`<option value=${entry}>${providerMap.get(entry)?.label ?? entry}</option>`,
+                )
+          }
+        </select>
+      </label>
+      <label class="field chat-controls__model">
+        <select
+          .value=${selectedModelRef}
+          ?disabled=${!canSelectModel}
+          @change=${(e: Event) => {
+            const rawRef = (e.target as HTMLSelectElement).value.trim();
+            if (!rawRef) {
+              return;
+            }
+            const [provider, model] = rawRef.split("/", 2);
+            if (!provider || !model) {
+              return;
+            }
+            const match = state.chatModels.find(
+              (entry) =>
+                normalizeProviderIdForThinking(entry.provider) ===
+                  normalizeProviderIdForThinking(provider) && entry.id === model,
+            );
+            const options = resolveThinkingOptionList({
+              provider,
+              thinkingLevels: match?.thinkingLevels,
+            });
+            const nextThinking = resolveDefaultThinkingOption(options);
+            void state.handleSessionsPatch(state.sessionKey, {
+              model: rawRef,
+              thinkingLevel: resolveThinkingPatchValue(
+                nextThinking,
+                isBinaryThinkingProviderForUi(provider),
+              ),
+            });
+          }}
+        >
+          ${
+            modelsForProvider.length === 0
+              ? html`
+                  <option value="">Model</option>
+                `
+              : repeat(
+                  modelsForProvider,
+                  (entry) => `${entry.provider}/${entry.id}`,
+                  (entry) =>
+                    html`<option value=${`${entry.provider}/${entry.id}`}>
+                      ${entry.name}
+                    </option>`,
+                )
+          }
+        </select>
+      </label>
+      <label class="field chat-controls__reasoning">
+        <select
+          .value=${thinkingDisplay}
+          ?disabled=${!canSelectThinking}
+          @change=${(e: Event) => {
+            const value = (e.target as HTMLSelectElement).value;
+            void state.handleSessionsPatch(state.sessionKey, {
+              thinkingLevel: resolveThinkingPatchValue(value, isBinaryProvider),
+            });
+          }}
+        >
+          ${repeat(
+            displayedThinkingOptions,
+            (entry) => entry,
+            (entry) => html`<option value=${entry}>${entry}</option>`,
+          )}
+        </select>
+      </label>
       <button
         class="btn btn--sm btn--icon"
         ?disabled=${state.chatLoading || !state.connected}
@@ -148,6 +291,11 @@ export function renderChatControls(state: AppViewState) {
       >
         ${refreshIcon}
       </button>
+      ${
+        state.chatModelsError
+          ? html`<span class="muted" title=${state.chatModelsError}>model catalog unavailable</span>`
+          : null
+      }
       <span class="chat-controls__separator">|</span>
       <button
         class="btn btn--sm btn--icon ${showThinking ? "active" : ""}"
@@ -193,6 +341,74 @@ export function renderChatControls(state: AppViewState) {
       </button>
     </div>
   `;
+}
+
+function normalizeProviderIdForThinking(provider?: string | null): string {
+  if (!provider) {
+    return "";
+  }
+  const normalized = provider.trim().toLowerCase();
+  if (normalized === "z.ai" || normalized === "z-ai") {
+    return "zai";
+  }
+  return normalized;
+}
+
+function isBinaryThinkingProviderForUi(provider?: string | null): boolean {
+  return normalizeProviderIdForThinking(provider) === "zai";
+}
+
+function resolveThinkingOptionList(params: {
+  provider?: string;
+  thinkingLevels?: ReadonlyArray<string>;
+}): string[] {
+  const fallback = ["off", "minimal", "low", "medium", "high", "xhigh"];
+  const levels =
+    Array.isArray(params.thinkingLevels) && params.thinkingLevels.length > 0
+      ? [...new Set(params.thinkingLevels.map((entry) => String(entry).trim()).filter(Boolean))]
+      : fallback;
+  if (!isBinaryThinkingProviderForUi(params.provider)) {
+    return levels;
+  }
+  const hasEnabled = levels.some((entry) => entry !== "off");
+  return hasEnabled ? ["off", "on"] : ["off"];
+}
+
+function resolveThinkingDisplay(value: string | null | undefined, isBinary: boolean): string {
+  const level = String(value ?? "").trim();
+  if (!isBinary) {
+    return level || "off";
+  }
+  if (!level || level === "off") {
+    return "off";
+  }
+  return "on";
+}
+
+function resolveThinkingPatchValue(value: string, isBinary: boolean): string | null {
+  const level = value.trim();
+  if (!level || level === "off") {
+    return null;
+  }
+  if (!isBinary) {
+    return level;
+  }
+  return "low";
+}
+
+function resolveDefaultThinkingOption(options: ReadonlyArray<string>): string {
+  if (options.includes("low")) {
+    return "low";
+  }
+  const enabled = options.find((entry) => entry !== "off");
+  return enabled ?? "off";
+}
+
+function withCurrentThinkingOption(options: ReadonlyArray<string>, current: string): string[] {
+  if (!current || options.includes(current)) {
+    return [...options];
+  }
+  return [...options, current];
 }
 
 type SessionDefaultsSnapshot = {

@@ -336,6 +336,20 @@
   max-width: 420px;
 }
 
+.chat-controls__provider,
+.chat-controls__model,
+.chat-controls__reasoning {
+  min-width: 120px;
+}
+
+.chat-controls__model {
+  min-width: 180px;
+}
+
+.chat-controls__reasoning {
+  min-width: 120px;
+}
+
 .chat-controls__thinking {
   display: flex;
   align-items: center;
@@ -405,6 +419,16 @@
   text-overflow: ellipsis;
 }
 
+.chat-controls__provider select,
+.chat-controls__model select,
+.chat-controls__reasoning select {
+  padding: 6px 10px;
+  font-size: 13px;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .chat-controls__thinking {
   display: flex;
   align-items: center;
@@ -438,5 +462,11 @@
 
   .chat-controls__session {
     min-width: 120px;
+  }
+
+  .chat-controls__provider,
+  .chat-controls__model,
+  .chat-controls__reasoning {
+    min-width: 110px;
   }
 }

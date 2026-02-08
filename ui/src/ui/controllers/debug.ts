@@ -1,5 +1,5 @@
 import type { GatewayBrowserClient } from "../gateway.ts";
-import type { HealthSnapshot, StatusSummary } from "../types.ts";
+import type { GatewayModelChoice, HealthSnapshot, StatusSummary } from "../types.ts";
 
 export type DebugState = {
   client: GatewayBrowserClient | null;
@@ -7,7 +7,7 @@ export type DebugState = {
   debugLoading: boolean;
   debugStatus: StatusSummary | null;
   debugHealth: HealthSnapshot | null;
-  debugModels: unknown[];
+  debugModels: GatewayModelChoice[];
   debugHeartbeat: unknown;
   debugCallMethod: string;
   debugCallParams: string;
@@ -32,8 +32,8 @@ export async function loadDebug(state: DebugState) {
     ]);
     state.debugStatus = status as StatusSummary;
     state.debugHealth = health as HealthSnapshot;
-    const modelPayload = models as { models?: unknown[] } | undefined;
-    state.debugModels = Array.isArray(modelPayload?.models) ? modelPayload?.models : [];
+    const modelPayload = models as { models?: GatewayModelChoice[] } | undefined;
+    state.debugModels = Array.isArray(modelPayload?.models) ? modelPayload.models : [];
     state.debugHeartbeat = heartbeat;
   } catch (err) {
     state.debugCallError = String(err);
