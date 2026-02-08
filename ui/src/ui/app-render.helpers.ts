@@ -8,6 +8,7 @@ import { refreshChat } from "./app-chat.ts";
 import { syncUrlWithSessionKey } from "./app-settings.ts";
 import { OpenClawApp } from "./app.ts";
 import { ChatState, loadChatHistory } from "./controllers/chat.ts";
+import { patchSession } from "./controllers/sessions.ts";
 import { icons } from "./icons.ts";
 import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.ts";
 
@@ -182,14 +183,24 @@ export function renderChatControls(state: AppViewState) {
               thinkingLevels: nextModel.thinkingLevels,
             });
             const nextThinking = resolveDefaultThinkingOption(options);
-            void state.handleSessionsPatch(state.sessionKey, {
-              model: `${nextModel.provider}/${nextModel.id}`,
-              thinkingLevel: resolveThinkingPatchValue(
-                nextThinking,
-                isBinaryThinkingProviderForUi(nextProvider.label),
-                nextModel.thinkingLevels,
-              ),
+            const nextModelRef = `${nextModel.provider}/${nextModel.id}`;
+            const nextThinkingPatch = resolveThinkingPatchValue(
+              nextThinking,
+              isBinaryThinkingProviderForUi(nextProvider.label),
+              nextModel.thinkingLevels,
+            );
+            applyLocalChatSessionPatch(state, {
+              model: nextModelRef,
+              thinkingLevel: nextThinkingPatch,
             });
+            void patchSession(
+              state as unknown as Parameters<typeof patchSession>[0],
+              state.sessionKey,
+              {
+                model: nextModelRef,
+                thinkingLevel: nextThinkingPatch,
+              },
+            );
           }}
         >
           ${
@@ -229,14 +240,23 @@ export function renderChatControls(state: AppViewState) {
               thinkingLevels: match?.thinkingLevels,
             });
             const nextThinking = resolveDefaultThinkingOption(options);
-            void state.handleSessionsPatch(state.sessionKey, {
+            const nextThinkingPatch = resolveThinkingPatchValue(
+              nextThinking,
+              isBinaryThinkingProviderForUi(provider),
+              match?.thinkingLevels,
+            );
+            applyLocalChatSessionPatch(state, {
               model: rawRef,
-              thinkingLevel: resolveThinkingPatchValue(
-                nextThinking,
-                isBinaryThinkingProviderForUi(provider),
-                match?.thinkingLevels,
-              ),
+              thinkingLevel: nextThinkingPatch,
             });
+            void patchSession(
+              state as unknown as Parameters<typeof patchSession>[0],
+              state.sessionKey,
+              {
+                model: rawRef,
+                thinkingLevel: nextThinkingPatch,
+              },
+            );
           }}
         >
           ${
@@ -261,13 +281,19 @@ export function renderChatControls(state: AppViewState) {
           ?disabled=${!canSelectThinking}
           @change=${(e: Event) => {
             const value = (e.target as HTMLSelectElement).value;
-            void state.handleSessionsPatch(state.sessionKey, {
-              thinkingLevel: resolveThinkingPatchValue(
-                value,
-                isBinaryProvider,
-                selectedModel?.thinkingLevels,
-              ),
-            });
+            const nextThinkingPatch = resolveThinkingPatchValue(
+              value,
+              isBinaryProvider,
+              selectedModel?.thinkingLevels,
+            );
+            applyLocalChatSessionPatch(state, { thinkingLevel: nextThinkingPatch });
+            void patchSession(
+              state as unknown as Parameters<typeof patchSession>[0],
+              state.sessionKey,
+              {
+                thinkingLevel: nextThinkingPatch,
+              },
+            );
           }}
         >
           ${
@@ -358,6 +384,43 @@ export function renderChatControls(state: AppViewState) {
       </button>
     </div>
   `;
+}
+
+function applyLocalChatSessionPatch(
+  state: AppViewState,
+  patch: { model?: string | null; thinkingLevel?: string | null },
+) {
+  const result = state.sessionsResult;
+  if (!result?.sessions?.length) {
+    return;
+  }
+  const nextSessions = result.sessions.map((row) => {
+    if (row.key !== state.sessionKey) {
+      return row;
+    }
+    const next = { ...row };
+    if ("model" in patch) {
+      const raw = String(patch.model ?? "").trim();
+      if (!raw) {
+        next.model = undefined;
+        next.modelProvider = undefined;
+      } else {
+        const [provider, model] = raw.split("/", 2);
+        if (provider && model) {
+          next.modelProvider = provider;
+          next.model = model;
+        }
+      }
+    }
+    if ("thinkingLevel" in patch) {
+      next.thinkingLevel = patch.thinkingLevel ?? undefined;
+    }
+    return next;
+  });
+  state.sessionsResult = {
+    ...result,
+    sessions: nextSessions,
+  };
 }
 
 function normalizeProviderIdForThinking(provider?: string | null): string {

@@ -264,7 +264,6 @@ export type AppViewState = {
   handleCronRunsLoad: (jobId: string) => Promise<void>;
   handleCronFormUpdate: (path: string, value: unknown) => void;
   handleSessionsLoad: () => Promise<void>;
-  handleSessionsPatch: (key: string, patch: unknown) => Promise<void>;
   handleLoadNodes: () => Promise<void>;
   handleLoadPresence: () => Promise<void>;
   handleLoadSkills: () => Promise<void>;
