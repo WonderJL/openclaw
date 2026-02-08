@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 import {
+  buildAllowedModelSet,
+  resolveAllowedModelRef,
   parseModelRef,
   resolveModelRefFromString,
   resolveConfiguredModelRef,
@@ -193,6 +195,77 @@ describe("model-selection", () => {
         catalog: [],
       });
       expect(result).toBe("high");
+    });
+  });
+
+  describe("allowlist + fallback refs", () => {
+    it("includes configured fallback refs when model allowlist is enabled", () => {
+      const cfg = {
+        agents: {
+          defaults: {
+            model: {
+              primary: "google-antigravity/claude-opus-4-6-thinking",
+              fallbacks: ["openai-codex/gpt-5.2"],
+            },
+            models: {
+              "google-antigravity/claude-opus-4-6-thinking": {},
+            },
+          },
+        },
+      } as OpenClawConfig;
+
+      const allowed = buildAllowedModelSet({
+        cfg,
+        catalog: [
+          {
+            provider: "google-antigravity",
+            id: "claude-opus-4-6-thinking",
+            name: "claude-opus-4-6-thinking",
+          },
+          { provider: "openai-codex", id: "gpt-5.2", name: "gpt-5.2" },
+        ],
+        defaultProvider: "google-antigravity",
+        defaultModel: "claude-opus-4-6-thinking",
+      });
+
+      expect(allowed.allowAny).toBe(false);
+      expect(allowed.allowedKeys.has(modelKey("openai-codex", "gpt-5.2"))).toBe(true);
+    });
+
+    it("accepts fallback models in resolveAllowedModelRef", () => {
+      const cfg = {
+        agents: {
+          defaults: {
+            model: {
+              primary: "google-antigravity/claude-opus-4-6-thinking",
+              fallbacks: ["openai-codex/gpt-5.2"],
+            },
+            models: {
+              "google-antigravity/claude-opus-4-6-thinking": {},
+            },
+          },
+        },
+      } as OpenClawConfig;
+
+      const resolved = resolveAllowedModelRef({
+        cfg,
+        catalog: [
+          {
+            provider: "google-antigravity",
+            id: "claude-opus-4-6-thinking",
+            name: "claude-opus-4-6-thinking",
+          },
+          { provider: "openai-codex", id: "gpt-5.2", name: "gpt-5.2" },
+        ],
+        raw: "openai-codex/gpt-5.2",
+        defaultProvider: "google-antigravity",
+        defaultModel: "claude-opus-4-6-thinking",
+      });
+
+      expect("error" in resolved).toBe(false);
+      if (!("error" in resolved)) {
+        expect(resolved.key).toBe("openai-codex/gpt-5.2");
+      }
     });
   });
 });

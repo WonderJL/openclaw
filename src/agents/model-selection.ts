@@ -112,19 +112,70 @@ export function buildConfiguredAllowlistKeys(params: {
   cfg: OpenClawConfig | undefined;
   defaultProvider: string;
 }): Set<string> | null {
-  const rawAllowlist = Object.keys(params.cfg?.agents?.defaults?.models ?? {});
-  if (rawAllowlist.length === 0) {
+  const rawModelAllowlist = Object.keys(params.cfg?.agents?.defaults?.models ?? {});
+  if (rawModelAllowlist.length === 0) {
     return null;
   }
+  const aliasIndex = buildModelAliasIndex({
+    cfg: params.cfg ?? {},
+    defaultProvider: params.defaultProvider,
+  });
+  const rawAllowlist = [...rawModelAllowlist, ...collectSupplementalAllowlistRefs(params.cfg)];
 
   const keys = new Set<string>();
   for (const raw of rawAllowlist) {
-    const key = resolveAllowlistModelKey(String(raw ?? ""), params.defaultProvider);
-    if (key) {
-      keys.add(key);
+    const resolved = resolveModelRefFromString({
+      raw: String(raw ?? ""),
+      defaultProvider: params.defaultProvider,
+      aliasIndex,
+    });
+    if (resolved) {
+      keys.add(modelKey(resolved.ref.provider, resolved.ref.model));
     }
   }
   return keys.size > 0 ? keys : null;
+}
+
+function collectModelListConfigRefs(
+  raw: { primary?: string; fallbacks?: string[] } | string | undefined,
+): string[] {
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  if (!raw || typeof raw !== "object") {
+    return [];
+  }
+
+  const refs: string[] = [];
+  const primary = raw.primary?.trim();
+  if (primary) {
+    refs.push(primary);
+  }
+  for (const candidate of raw.fallbacks ?? []) {
+    const trimmed = String(candidate ?? "").trim();
+    if (trimmed) {
+      refs.push(trimmed);
+    }
+  }
+  return refs;
+}
+
+function collectSupplementalAllowlistRefs(cfg: OpenClawConfig | undefined): string[] {
+  return [
+    ...collectModelListConfigRefs(
+      cfg?.agents?.defaults?.model as
+        | { primary?: string; fallbacks?: string[] }
+        | string
+        | undefined,
+    ),
+    ...collectModelListConfigRefs(
+      cfg?.agents?.defaults?.imageModel as
+        | { primary?: string; fallbacks?: string[] }
+        | string
+        | undefined,
+    ),
+  ];
 }
 
 export function buildModelAliasIndex(params: {
@@ -264,11 +315,15 @@ export function buildAllowedModelSet(params: {
   allowedCatalog: ModelCatalogEntry[];
   allowedKeys: Set<string>;
 } {
-  const rawAllowlist = (() => {
-    const modelMap = params.cfg.agents?.defaults?.models ?? {};
-    return Object.keys(modelMap);
-  })();
-  const allowAny = rawAllowlist.length === 0;
+  const rawModelAllowlist = Object.keys(params.cfg.agents?.defaults?.models ?? {});
+  const allowAny = rawModelAllowlist.length === 0;
+  const aliasIndex = buildModelAliasIndex({
+    cfg: params.cfg,
+    defaultProvider: params.defaultProvider,
+  });
+  const rawAllowlist = allowAny
+    ? []
+    : [...rawModelAllowlist, ...collectSupplementalAllowlistRefs(params.cfg)];
   const defaultModel = params.defaultModel?.trim();
   const defaultKey =
     defaultModel && params.defaultProvider
@@ -290,13 +345,17 @@ export function buildAllowedModelSet(params: {
   const allowedKeys = new Set<string>();
   const configuredProviders = (params.cfg.models?.providers ?? {}) as Record<string, unknown>;
   for (const raw of rawAllowlist) {
-    const parsed = parseModelRef(String(raw), params.defaultProvider);
-    if (!parsed) {
+    const resolved = resolveModelRefFromString({
+      raw: String(raw ?? ""),
+      defaultProvider: params.defaultProvider,
+      aliasIndex,
+    });
+    if (!resolved) {
       continue;
     }
-    const key = modelKey(parsed.provider, parsed.model);
-    const providerKey = normalizeProviderId(parsed.provider);
-    if (isCliProvider(parsed.provider, params.cfg)) {
+    const key = modelKey(resolved.ref.provider, resolved.ref.model);
+    const providerKey = normalizeProviderId(resolved.ref.provider);
+    if (isCliProvider(resolved.ref.provider, params.cfg)) {
       allowedKeys.add(key);
     } else if (catalogKeys.has(key)) {
       allowedKeys.add(key);
