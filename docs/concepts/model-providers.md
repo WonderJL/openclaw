@@ -296,9 +296,10 @@ Example (OpenAI‑compatible):
 
 Notes:
 
-- For custom providers, `reasoning`, `input`, `cost`, `contextWindow`, and `maxTokens` are optional.
+- For custom providers, `reasoning`, `thinkingLevels`, `input`, `cost`, `contextWindow`, and `maxTokens` are optional.
   When omitted, OpenClaw defaults to:
   - `reasoning: false`
+  - `thinkingLevels`: provider defaults (for example `off|minimal|low|medium|high|xhigh`; binary providers may expose `off|on` in UI)
   - `input: ["text"]`
   - `cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }`
   - `contextWindow: 200000`

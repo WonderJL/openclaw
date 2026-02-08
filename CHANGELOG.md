@@ -7,6 +7,7 @@ Docs: https://docs.openclaw.ai
 ### Added
 
 - Gateway: add `agents.create`, `agents.update`, `agents.delete` RPC methods for web UI agent management. (#11045) Thanks @advaitpaliwal.
+- Agents/Gateway/Web UI: add multi-provider session switching with provider/model/reasoning controls in chat, model-level `thinkingLevels` policy support, and generated `gateway-<provider>` skill commands for deterministic handoff.
 
 ### Fixes
 

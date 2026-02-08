@@ -119,6 +119,7 @@ Notes:
   - `/skill <name> [input]` runs a skill by name (useful when native command limits prevent per-skill commands).
   - By default, skill commands are forwarded to the model as a normal request.
   - Skills may optionally declare `command-dispatch: tool` to route the command directly to a tool (deterministic, no model).
+  - OpenClaw also generates `gateway-<provider>` skill commands from configured `models.providers` entries. These switch the current session gateway and support optional model/reasoning args (for example `/gateway-openai gpt-5.2 high`).
   - Example: `/prose` (OpenProse plugin) — see [OpenProse](/prose).
 - **Native command arguments:** Discord uses autocomplete for dynamic options (and button menus when you omit required args). Telegram and Slack show a button menu when a command supports choices and you omit the arg.
 
