@@ -6,8 +6,10 @@ export const ModelChoiceSchema = Type.Object(
     id: NonEmptyString,
     name: NonEmptyString,
     provider: NonEmptyString,
+    key: Type.Optional(NonEmptyString),
     contextWindow: Type.Optional(Type.Integer({ minimum: 1 })),
     reasoning: Type.Optional(Type.Boolean()),
+    input: Type.Optional(Type.Array(Type.Union([Type.Literal("text"), Type.Literal("image")]))),
     thinkingLevels: Type.Optional(
       Type.Array(
         Type.Union([
@@ -20,6 +22,12 @@ export const ModelChoiceSchema = Type.Object(
         ]),
       ),
     ),
+    thinkingLevelsExplicit: Type.Optional(Type.Boolean()),
+    thinking: Type.Optional(NonEmptyString),
+    local: Type.Optional(Type.Boolean()),
+    available: Type.Optional(Type.Boolean()),
+    tags: Type.Optional(Type.Array(NonEmptyString)),
+    missing: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );
@@ -176,7 +184,14 @@ export const AgentsFilesSetResultSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const ModelsListParamsSchema = Type.Object({}, { additionalProperties: false });
+export const ModelsListParamsSchema = Type.Object(
+  {
+    all: Type.Optional(Type.Boolean()),
+    local: Type.Optional(Type.Boolean()),
+    provider: Type.Optional(NonEmptyString),
+  },
+  { additionalProperties: false },
+);
 
 export const ModelsListResultSchema = Type.Object(
   {

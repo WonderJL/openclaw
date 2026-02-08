@@ -8,6 +8,7 @@ import type {
   ChannelsStatusSnapshot,
   CronJob,
   CronStatus,
+  GatewayModelChoice,
   SkillStatusEntry,
   SkillStatusReport,
 } from "../types.ts";
@@ -33,6 +34,7 @@ export type AgentsProps = {
   selectedAgentId: string | null;
   activePanel: AgentsPanel;
   configForm: Record<string, unknown> | null;
+  models: GatewayModelChoice[];
   configLoading: boolean;
   configSaving: boolean;
   configDirty: boolean;
@@ -411,6 +413,30 @@ type ConfiguredModelOption = {
   label: string;
 };
 
+function resolveCatalogModels(models: GatewayModelChoice[]): ConfiguredModelOption[] {
+  const options: ConfiguredModelOption[] = [];
+  const seen = new Set<string>();
+  for (const entry of models) {
+    if (entry.missing) {
+      continue;
+    }
+    const provider = entry.provider.trim();
+    const id = entry.id.trim();
+    if (!provider || !id) {
+      continue;
+    }
+    const value = `${provider}/${id}`;
+    if (seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    const labelName = entry.name?.trim();
+    const label = labelName && labelName !== id ? `${labelName} (${value})` : value;
+    options.push({ value, label });
+  }
+  return options;
+}
+
 function resolveConfiguredModels(
   configForm: Record<string, unknown> | null,
 ): ConfiguredModelOption[] {
@@ -437,8 +463,15 @@ function resolveConfiguredModels(
   return options;
 }
 
-function buildModelOptions(configForm: Record<string, unknown> | null, current?: string | null) {
-  const options = resolveConfiguredModels(configForm);
+function buildModelOptions(params: {
+  configForm: Record<string, unknown> | null;
+  models: GatewayModelChoice[];
+  current?: string | null;
+}) {
+  const catalogOptions = resolveCatalogModels(params.models);
+  const options =
+    catalogOptions.length > 0 ? catalogOptions : resolveConfiguredModels(params.configForm);
+  const current = params.current;
   const hasCurrent = current ? options.some((option) => option.value === current) : false;
   if (current && !hasCurrent) {
     options.unshift({ value: current, label: `Current (${current})` });
@@ -610,6 +643,7 @@ export function renderAgents(props: AgentsProps) {
                       agent: selectedAgent,
                       defaultId,
                       configForm: props.configForm,
+                      models: props.models,
                       agentFilesList: props.agentFilesList,
                       agentIdentity: props.agentIdentityById[selectedAgent.id] ?? null,
                       agentIdentityError: props.agentIdentityError,
@@ -778,6 +812,7 @@ function renderAgentOverview(params: {
   agent: AgentsListResult["agents"][number];
   defaultId: string | null;
   configForm: Record<string, unknown> | null;
+  models: GatewayModelChoice[];
   agentFilesList: AgentsFilesListResult | null;
   agentIdentity: AgentIdentityResult | null;
   agentIdentityLoading: boolean;
@@ -793,6 +828,7 @@ function renderAgentOverview(params: {
   const {
     agent,
     configForm,
+    models,
     agentFilesList,
     agentIdentity,
     agentIdentityLoading,
@@ -893,7 +929,11 @@ function renderAgentOverview(params: {
                       </option>
                     `
               }
-              ${buildModelOptions(configForm, effectivePrimary ?? undefined)}
+              ${buildModelOptions({
+                configForm,
+                models,
+                current: effectivePrimary ?? undefined,
+              })}
             </select>
           </label>
           <label class="field" style="min-width: 260px; flex: 1;">

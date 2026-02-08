@@ -301,6 +301,7 @@ export function renderApp(state: AppViewState) {
                 limit: state.sessionsFilterLimit,
                 includeGlobal: state.sessionsIncludeGlobal,
                 includeUnknown: state.sessionsIncludeUnknown,
+                models: state.chatModels,
                 basePath: state.basePath,
                 onFiltersChange: (next) => {
                   state.sessionsFilterActive = next.activeMinutes;
@@ -615,6 +616,7 @@ export function renderApp(state: AppViewState) {
                 selectedAgentId: resolvedAgentId,
                 activePanel: state.agentsPanel,
                 configForm: configValue,
+                models: state.chatModels,
                 configLoading: state.configLoading,
                 configSaving: state.configSaving,
                 configDirty: state.configFormDirty,

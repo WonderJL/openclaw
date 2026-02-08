@@ -19,7 +19,9 @@ export async function loadModels(state: ModelsState) {
   state.chatModelsLoading = true;
   state.chatModelsError = null;
   try {
-    const res = await state.client.request<ModelsListResult | undefined>("models.list", {});
+    const res = await state.client.request<ModelsListResult | undefined>("models.list", {
+      all: false,
+    });
     state.chatModels = Array.isArray(res?.models) ? res.models : [];
   } catch (err) {
     state.chatModelsError = String(err);

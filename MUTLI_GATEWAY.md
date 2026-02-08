@@ -7,6 +7,7 @@ This document defines how OpenClaw supports multi AI provider gateway usage acro
 1. Runtime configuration (`models.providers.*`)
 2. Session switching (`sessions.patch`, skill commands)
 3. User surfaces (CLI + Web UI chat controls)
+4. Interactive configure model picker behavior (provider-scoped + usable-only + optional access probe)
 
 The target is consistent provider/model/reasoning behavior across all entry points.
 
@@ -32,6 +33,16 @@ openclaw models list
 openclaw models status
 ```
 
+Set global or per-model thinking defaults:
+
+```bash
+# Global default when no per-model override exists
+openclaw config set agents.defaults.thinkingDefault "low"
+
+# Per-model defaults (replace/update the full models map)
+openclaw config set agents.defaults.models '{"openai-codex/gpt-5.2-codex":{"thinkingDefault":"high"},"openai-codex/gpt-5.3-codex":{"thinkingDefault":"medium"}}'
+```
+
 ### 1.1.1 List all available providers/gateways/models
 
 Use these commands:
@@ -51,6 +62,8 @@ Also available by surface:
 
 1. UI: Chat header provider/model dropdowns (loaded from `models.list`)
 2. Skill commands: `/gateway-<provider>` commands are generated from `models.providers`
+
+`openclaw models list` includes a `Think` column that shows the allowed thinking levels per model (for example `off|low|medium|high|xhigh`).
 
 ### 1.1.2 Add / Update / Delete provider-gateway-model
 
@@ -102,6 +115,54 @@ Notes:
 1. `openclaw models list` shows runtime availability; `openclaw config get models.providers` shows configured source.
 2. After add/update/delete, rerun `openclaw models list` and `openclaw models status` to verify.
 3. Deleting a provider removes its generated `/gateway-<provider>` skill command.
+
+### 1.1.3 Configure model picker (provider-scoped usable-only + access probe)
+
+When you run `openclaw configure --section model` and choose a provider auth path:
+
+1. The model multi-select is filtered to the selected provider (`preferredProvider`).
+2. In provider-scoped mode, unusable models are hidden (`onlyUsable=true`) instead of shown with `auth missing`.
+3. After selecting one or more models, OpenClaw asks `Test selected models now?` (default: `Yes`).
+4. If `Yes`, each selected model is probed individually with a short no-tools prompt.
+5. Failed models are removed from the saved selection; passing models are kept.
+6. If all selected models fail, configure returns to the picker and asks you to select again.
+7. If `No`, selection is saved unchanged.
+
+Probe defaults:
+
+1. Prompt: `Reply with OK. Do not use tools.`
+2. Timeout: `8000ms`
+3. Concurrency: `2`
+4. Max tokens: `8`
+
+Scope note:
+
+1. This filtering/probe behavior applies to interactive configure flows.
+2. Non-configure listing surfaces (`openclaw models list`, `openclaw models status`, chat `/models`) keep their existing behavior.
+
+### 1.1.4 Change thinking per model
+
+Use per-model defaults in `agents.defaults.models`:
+
+```json5
+{
+  agents: {
+    defaults: {
+      thinkingDefault: "low", // global fallback
+      models: {
+        "openai-codex/gpt-5.2-codex": { thinkingDefault: "high" },
+        "openai-codex/gpt-5.3-codex": { thinkingDefault: "medium" },
+      },
+    },
+  },
+}
+```
+
+Thinking default precedence:
+
+1. Per-model `agents.defaults.models["provider/model"].thinkingDefault`
+2. Global `agents.defaults.thinkingDefault`
+3. Built-in fallback (`low` for reasoning-capable models, otherwise `off`)
 
 ### 1.2 Session Command Usage (Skill Commands)
 
@@ -155,14 +216,16 @@ Actual: <what happened>
 ### 2.1 Config + Policy Layer
 
 1. `src/config/types.models.ts`
-2. `src/config/zod-schema.core.ts`
-3. `src/agents/model-thinking-levels.ts`
+2. `src/config/types.agent-defaults.ts`
+3. `src/config/zod-schema.agent-defaults.ts`
+4. `src/agents/model-thinking-levels.ts`
+5. `src/agents/model-selection.ts`
 
 Responsibilities:
 
 1. Define `thinkingLevels` per model
 2. Validate allowed reasoning values
-3. Resolve per-model default reasoning
+3. Resolve default reasoning precedence (per-model override first, then global default, then capability fallback)
 
 ### 2.2 Catalog + Protocol Layer
 
@@ -219,12 +282,34 @@ Responsibilities:
 3. Patch session on selection changes
 4. Handle binary provider display (`off/on`)
 
+### 2.6 Configure Picker + Access Probe Layer
+
+1. `src/commands/model-picker.ts`
+2. `src/commands/configure.gateway-auth.ts`
+3. `src/commands/model-picker.probe.ts`
+
+Responsibilities:
+
+1. Filter interactive picker options by selected provider
+2. Hide auth-missing entries in usable-only mode
+3. Prompt to test selected models before save
+4. Probe each selected model, keep passing models, and re-prompt when all fail
+
 ## 3) Examples And Samples
 
 ### 3.1 Sample Config (JSON5)
 
 ```json5
 {
+  agents: {
+    defaults: {
+      thinkingDefault: "low",
+      models: {
+        "openai/gpt-5.2": { thinkingDefault: "high" },
+        "anthropic/claude-sonnet-4-5": { thinkingDefault: "minimal" },
+      },
+    },
+  },
   models: {
     providers: {
       openai: {
@@ -309,6 +394,8 @@ Internally routes to `gateway_switch` tool and applies:
 3. Reasoning policy is model-scoped, not global
 4. UI and command flows must share the same backend validation
 5. `off` is represented as `thinkingLevel: null` in patch operations
+6. In configure model picker flows, provider selection narrows choices to that provider and usable models
+7. Access probe is opt-in (default yes) and prunes failed models before save
 
 ## 5) CLI + UI Coverage Checklist
 
@@ -318,6 +405,10 @@ Internally routes to `gateway_switch` tool and applies:
 2. Verify model list and defaults
 3. Use gateway skill commands with and without args
 4. Validate rejection for disallowed reasoning level
+5. Verify `Think` column in `openclaw models list`
+6. Verify configure picker only shows provider-scoped usable models after auth choice
+7. Verify `Test selected models now?` probe keeps passing models and drops failing models
+8. Verify all-fail probe path re-prompts and does not save unusable-only selection
 
 ### 5.2 UI Coverage
 
@@ -332,4 +423,8 @@ Internally routes to `gateway_switch` tool and applies:
 1. `src/gateway/sessions-patch.test.ts`
 2. `src/auto-reply/skill-commands.test.ts`
 3. `src/agents/tools/gateway-switch-tool.test.ts`
-4. `ui/src/ui/navigation.browser.test.ts`
+4. `src/commands/model-picker.test.ts`
+5. `src/commands/configure.gateway-auth.test.ts`
+6. `src/commands/model-picker.probe.test.ts`
+7. `src/commands/models.list.test.ts`
+8. `ui/src/ui/navigation.browser.test.ts`

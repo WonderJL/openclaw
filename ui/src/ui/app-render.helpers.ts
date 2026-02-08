@@ -82,10 +82,15 @@ export function renderChatControls(state: AppViewState) {
     provider: selectedProvider?.label,
     thinkingLevels: selectedModel?.thinkingLevels,
   });
-  const thinkingDisplay = resolveThinkingDisplay(activeSession?.thinkingLevel, isBinaryProvider);
-  const displayedThinkingOptions = withCurrentThinkingOption(thinkingOptions, thinkingDisplay);
+  const hasExplicitThinkingLevels = thinkingOptions.length > 0;
+  const thinkingDisplay = hasExplicitThinkingLevels
+    ? resolveThinkingDisplay(activeSession?.thinkingLevel, isBinaryProvider)
+    : "";
+  const displayedThinkingOptions = hasExplicitThinkingLevels
+    ? withCurrentThinkingOption(thinkingOptions, thinkingDisplay)
+    : [];
   const canSelectModel = state.connected && !state.chatModelsLoading && Boolean(selectedProvider);
-  const canSelectThinking = canSelectModel && Boolean(selectedModel);
+  const canSelectThinking = canSelectModel && Boolean(selectedModel) && hasExplicitThinkingLevels;
   const showThinking = state.onboarding ? false : state.settings.chatShowThinking;
   const focusActive = state.onboarding ? true : state.settings.chatFocusMode;
   // Refresh icon
@@ -265,11 +270,17 @@ export function renderChatControls(state: AppViewState) {
             });
           }}
         >
-          ${repeat(
-            displayedThinkingOptions,
-            (entry) => entry,
-            (entry) => html`<option value=${entry}>${entry}</option>`,
-          )}
+          ${
+            displayedThinkingOptions.length === 0
+              ? html`
+                  <option value="">thinking unavailable</option>
+                `
+              : repeat(
+                  displayedThinkingOptions,
+                  (entry) => entry,
+                  (entry) => html`<option value=${entry}>${entry}</option>`,
+                )
+          }
         </select>
       </label>
       <button
@@ -368,11 +379,13 @@ function resolveThinkingOptionList(params: {
   provider?: string;
   thinkingLevels?: ReadonlyArray<string>;
 }): string[] {
-  const fallback = ["off", "minimal", "low", "medium", "high", "xhigh"];
   const levels =
     Array.isArray(params.thinkingLevels) && params.thinkingLevels.length > 0
       ? [...new Set(params.thinkingLevels.map((entry) => String(entry).trim()).filter(Boolean))]
-      : fallback;
+      : [];
+  if (levels.length === 0) {
+    return [];
+  }
   if (!isBinaryThinkingProviderForUi(params.provider)) {
     return levels;
   }

@@ -7,6 +7,7 @@ import {
   buildModelAliasIndex,
   normalizeProviderId,
   modelKey,
+  resolveThinkingDefault,
 } from "./model-selection.js";
 
 describe("model-selection", () => {
@@ -146,6 +147,52 @@ describe("model-selection", () => {
         defaultModel: "gpt-4",
       });
       expect(result).toEqual({ provider: "openai", model: "gpt-4" });
+    });
+  });
+
+  describe("resolveThinkingDefault", () => {
+    it("prefers per-model thinkingDefault over global default", () => {
+      const cfg = {
+        agents: {
+          defaults: {
+            thinkingDefault: "low",
+            models: {
+              "openai-codex/gpt-5.2-codex": {
+                thinkingDefault: "medium",
+              },
+            },
+          },
+        },
+      } as OpenClawConfig;
+
+      const result = resolveThinkingDefault({
+        cfg,
+        provider: "openai-codex",
+        model: "gpt-5.2-codex",
+        catalog: [],
+      });
+      expect(result).toBe("medium");
+    });
+
+    it("falls back to global thinkingDefault when model-level default is missing", () => {
+      const cfg = {
+        agents: {
+          defaults: {
+            thinkingDefault: "high",
+            models: {
+              "openai-codex/gpt-5.2-codex": {},
+            },
+          },
+        },
+      } as OpenClawConfig;
+
+      const result = resolveThinkingDefault({
+        cfg,
+        provider: "openai-codex",
+        model: "gpt-5.2-codex",
+        catalog: [],
+      });
+      expect(result).toBe("high");
     });
   });
 });

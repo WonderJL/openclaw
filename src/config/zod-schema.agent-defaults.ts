@@ -35,6 +35,16 @@ export const AgentDefaultsSchema = z
         z
           .object({
             alias: z.string().optional(),
+            thinkingDefault: z
+              .union([
+                z.literal("off"),
+                z.literal("minimal"),
+                z.literal("low"),
+                z.literal("medium"),
+                z.literal("high"),
+                z.literal("xhigh"),
+              ])
+              .optional(),
             /** Provider-specific API parameters (e.g., GLM-4.7 thinking mode). */
             params: z.record(z.string(), z.unknown()).optional(),
             /** Enable streaming for this model (default: true, false for Ollama to avoid SDK issue #1205). */

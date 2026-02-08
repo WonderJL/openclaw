@@ -22,6 +22,7 @@ function buildProps(result: SessionsListResult): SessionsProps {
     limit: "120",
     includeGlobal: false,
     includeUnknown: false,
+    models: [],
     basePath: "",
     onFiltersChange: () => undefined,
     onRefresh: () => undefined,

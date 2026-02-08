@@ -327,9 +327,17 @@ export type GatewayModelChoice = {
   id: string;
   name: string;
   provider: string;
+  key?: string;
   contextWindow?: number;
   reasoning?: boolean;
+  input?: Array<"text" | "image">;
   thinkingLevels?: Array<"off" | "minimal" | "low" | "medium" | "high" | "xhigh">;
+  thinkingLevelsExplicit?: boolean;
+  thinking?: string;
+  local?: boolean;
+  available?: boolean;
+  tags?: string[];
+  missing?: boolean;
 };
 
 export type ModelsListResult = {

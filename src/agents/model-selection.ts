@@ -1,5 +1,6 @@
 import type { OpenClawConfig } from "../config/config.js";
 import type { ModelCatalogEntry } from "./model-catalog.js";
+import { normalizeThinkLevel } from "../auto-reply/thinking.js";
 import { resolveAgentModelPrimary } from "./agent-scope.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
 import { normalizeGoogleModelId } from "./models-config.providers.js";
@@ -406,6 +407,36 @@ export function resolveThinkingDefault(params: {
   model: string;
   catalog?: ModelCatalogEntry[];
 }): ThinkLevel {
+  const normalizedProvider = normalizeProviderId(params.provider);
+  const normalizedModel = params.model.trim().toLowerCase();
+  const configuredModels = params.cfg.agents?.defaults?.models ?? {};
+  for (const [key, entry] of Object.entries(configuredModels)) {
+    const parsed = parseModelRef(String(key ?? ""), DEFAULT_PROVIDER);
+    if (!parsed) {
+      continue;
+    }
+    if (
+      normalizeProviderId(parsed.provider) !== normalizedProvider ||
+      parsed.model.trim().toLowerCase() !== normalizedModel
+    ) {
+      continue;
+    }
+    const configuredLevel = normalizeThinkLevel(
+      String(
+        (
+          entry as
+            | {
+                thinkingDefault?: string;
+              }
+            | undefined
+        )?.thinkingDefault ?? "",
+      ),
+    );
+    if (configuredLevel) {
+      return configuredLevel;
+    }
+  }
+
   const configured = params.cfg.agents?.defaults?.thinkingDefault;
   if (configured) {
     return configured;

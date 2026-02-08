@@ -14,6 +14,8 @@ import type { MemorySearchConfig } from "./types.tools.js";
 
 export type AgentModelEntryConfig = {
   alias?: string;
+  /** Default thinking level for this model when no /think override is set. */
+  thinkingDefault?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
   /** Provider-specific API parameters (e.g., GLM-4.7 thinking mode). */
   params?: Record<string, unknown>;
   /** Enable streaming for this model (default: true, false for Ollama to avoid SDK issue #1205). */

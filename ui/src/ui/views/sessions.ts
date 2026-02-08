@@ -1,5 +1,5 @@
 import { html, nothing } from "lit";
-import type { GatewaySessionRow, SessionsListResult } from "../types.ts";
+import type { GatewayModelChoice, GatewaySessionRow, SessionsListResult } from "../types.ts";
 import { formatAgo } from "../format.ts";
 import { pathForTab } from "../navigation.ts";
 import { formatSessionTokens } from "../presenter.ts";
@@ -12,6 +12,7 @@ export type SessionsProps = {
   limit: string;
   includeGlobal: boolean;
   includeUnknown: boolean;
+  models: GatewayModelChoice[];
   basePath: string;
   onFiltersChange: (next: {
     activeMinutes: string;
@@ -33,7 +34,6 @@ export type SessionsProps = {
   onDelete: (key: string) => void;
 };
 
-const THINK_LEVELS = ["", "off", "minimal", "low", "medium", "high", "xhigh"] as const;
 const BINARY_THINK_LEVELS = ["", "off", "on"] as const;
 const VERBOSE_LEVELS = [
   { value: "", label: "inherit" },
@@ -58,8 +58,55 @@ function isBinaryThinkingProvider(provider?: string | null): boolean {
   return normalizeProviderId(provider) === "zai";
 }
 
-function resolveThinkLevelOptions(provider?: string | null): readonly string[] {
-  return isBinaryThinkingProvider(provider) ? BINARY_THINK_LEVELS : THINK_LEVELS;
+function resolveBinaryEnabledThinkingLevel(thinkingLevels?: ReadonlyArray<string>): string {
+  if (!Array.isArray(thinkingLevels) || thinkingLevels.length === 0) {
+    return "low";
+  }
+  const normalized = [
+    ...new Set(thinkingLevels.map((entry) => String(entry).trim()).filter(Boolean)),
+  ];
+  if (normalized.includes("low")) {
+    return "low";
+  }
+  const enabled = normalized.find((entry) => entry !== "off");
+  return enabled ?? "low";
+}
+
+function resolveThinkLevelOptions(params: {
+  provider?: string | null;
+  thinkingLevels?: ReadonlyArray<string>;
+}): readonly string[] {
+  const levels =
+    Array.isArray(params.thinkingLevels) && params.thinkingLevels.length > 0
+      ? [...new Set(params.thinkingLevels.map((entry) => String(entry).trim()).filter(Boolean))]
+      : [];
+  if (levels.length === 0) {
+    return [];
+  }
+  if (!isBinaryThinkingProvider(params.provider)) {
+    return levels;
+  }
+  const hasEnabled = levels.some((entry) => entry !== "off");
+  return hasEnabled ? BINARY_THINK_LEVELS : ["", "off"];
+}
+
+function resolveSessionModelChoice(
+  models: GatewayModelChoice[],
+  row: GatewaySessionRow,
+): GatewayModelChoice | undefined {
+  const provider = normalizeProviderId(row.modelProvider);
+  const modelId = String(row.model ?? "")
+    .trim()
+    .toLowerCase();
+  if (!provider || !modelId) {
+    return undefined;
+  }
+  return models.find(
+    (entry) =>
+      normalizeProviderId(entry.provider) === provider &&
+      entry.id.trim().toLowerCase() === modelId &&
+      !entry.missing,
+  );
 }
 
 function withCurrentOption(options: readonly string[], current: string): string[] {
@@ -95,7 +142,11 @@ function resolveThinkLevelDisplay(value: string, isBinary: boolean): string {
   return "on";
 }
 
-function resolveThinkLevelPatchValue(value: string, isBinary: boolean): string | null {
+function resolveThinkLevelPatchValue(
+  value: string,
+  isBinary: boolean,
+  thinkingLevels?: ReadonlyArray<string>,
+): string | null {
   if (!value) {
     return null;
   }
@@ -103,7 +154,7 @@ function resolveThinkLevelPatchValue(value: string, isBinary: boolean): string |
     return value;
   }
   if (value === "on") {
-    return "low";
+    return resolveBinaryEnabledThinkingLevel(thinkingLevels);
   }
   return value;
 }
@@ -207,7 +258,14 @@ export function renderSessions(props: SessionsProps) {
                 <div class="muted">No sessions found.</div>
               `
             : rows.map((row) =>
-                renderRow(row, props.basePath, props.onPatch, props.onDelete, props.loading),
+                renderRow(
+                  row,
+                  props.basePath,
+                  props.onPatch,
+                  props.onDelete,
+                  props.loading,
+                  props.models,
+                ),
               )
         }
       </div>
@@ -221,12 +279,23 @@ function renderRow(
   onPatch: SessionsProps["onPatch"],
   onDelete: SessionsProps["onDelete"],
   disabled: boolean,
+  models: GatewayModelChoice[],
 ) {
   const updated = row.updatedAt ? formatAgo(row.updatedAt) : "n/a";
   const rawThinking = row.thinkingLevel ?? "";
   const isBinaryThinking = isBinaryThinkingProvider(row.modelProvider);
-  const thinking = resolveThinkLevelDisplay(rawThinking, isBinaryThinking);
-  const thinkLevels = withCurrentOption(resolveThinkLevelOptions(row.modelProvider), thinking);
+  const sessionModel = resolveSessionModelChoice(models, row);
+  const thinkLevelOptions = resolveThinkLevelOptions({
+    provider: row.modelProvider,
+    thinkingLevels: sessionModel?.thinkingLevels,
+  });
+  const hasExplicitThinkingLevels = thinkLevelOptions.length > 0;
+  const thinking = hasExplicitThinkingLevels
+    ? resolveThinkLevelDisplay(rawThinking, isBinaryThinking)
+    : "";
+  const thinkLevels = hasExplicitThinkingLevels
+    ? withCurrentOption(thinkLevelOptions, thinking)
+    : [];
   const verbose = row.verboseLevel ?? "";
   const verboseLevels = withCurrentLabeledOption(VERBOSE_LEVELS, verbose);
   const reasoning = row.reasoningLevel ?? "";
@@ -264,20 +333,28 @@ function renderRow(
       <div>${formatSessionTokens(row)}</div>
       <div>
         <select
-          ?disabled=${disabled}
+          ?disabled=${disabled || !hasExplicitThinkingLevels}
           @change=${(e: Event) => {
             const value = (e.target as HTMLSelectElement).value;
             onPatch(row.key, {
-              thinkingLevel: resolveThinkLevelPatchValue(value, isBinaryThinking),
+              thinkingLevel: resolveThinkLevelPatchValue(
+                value,
+                isBinaryThinking,
+                sessionModel?.thinkingLevels,
+              ),
             });
           }}
         >
-          ${thinkLevels.map(
-            (level) =>
-              html`<option value=${level} ?selected=${thinking === level}>
-                ${level || "inherit"}
-              </option>`,
-          )}
+          ${
+            thinkLevels.length === 0
+              ? html`<option value="" ?selected=${true}>thinking unavailable</option>`
+              : thinkLevels.map(
+                  (level) =>
+                    html`<option value=${level} ?selected=${thinking === level}>
+                      ${level || "inherit"}
+                    </option>`,
+                )
+          }
         </select>
       </div>
       <div>
