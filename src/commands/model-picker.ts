@@ -9,6 +9,7 @@ import {
   buildModelAliasIndex,
   modelKey,
   normalizeProviderId,
+  parseModelRef,
   resolveConfiguredModelRef,
 } from "../agents/model-selection.js";
 import { formatTokenK } from "./models/shared.js";
@@ -305,11 +306,17 @@ export async function promptModelAllowlist(params: {
   agentDir?: string;
   allowedKeys?: string[];
   initialSelections?: string[];
+  preferredProvider?: string;
+  onlyUsable?: boolean;
 }): Promise<PromptModelAllowlistResult> {
   const cfg = params.config;
   const existingKeys = resolveConfiguredModelKeys(cfg);
   const allowedKeys = normalizeModelKeys(params.allowedKeys ?? []);
   const allowedKeySet = allowedKeys.length > 0 ? new Set(allowedKeys) : null;
+  const preferredProviderRaw = params.preferredProvider?.trim();
+  const preferredProvider = preferredProviderRaw
+    ? normalizeProviderId(preferredProviderRaw)
+    : undefined;
   const resolved = resolveConfiguredModelRef({
     cfg,
     defaultProvider: DEFAULT_PROVIDER,
@@ -321,7 +328,7 @@ export async function promptModelAllowlist(params: {
     resolvedKey,
     ...(params.initialSelections ?? []),
   ]);
-  const initialKeys = allowedKeySet
+  const initialKeysRaw = allowedKeySet
     ? initialSeeds.filter((key) => allowedKeySet.has(key))
     : initialSeeds;
 
@@ -361,6 +368,29 @@ export async function promptModelAllowlist(params: {
     authCache.set(provider, value);
     return value;
   };
+  const keyMatchesPreferredProvider = (key: string) => {
+    if (!preferredProvider) {
+      return true;
+    }
+    const parsed = parseModelRef(key, DEFAULT_PROVIDER);
+    if (!parsed) {
+      return true;
+    }
+    return normalizeProviderId(parsed.provider) === preferredProvider;
+  };
+  const keyMatchesUsableOnly = (key: string) => {
+    if (!params.onlyUsable) {
+      return true;
+    }
+    const parsed = parseModelRef(key, DEFAULT_PROVIDER);
+    if (!parsed) {
+      return true;
+    }
+    return hasAuth(parsed.provider);
+  };
+  const initialKeys = initialKeysRaw.filter(
+    (key) => keyMatchesPreferredProvider(key) && keyMatchesUsableOnly(key),
+  );
 
   const options: WizardSelectOption[] = [];
   const seen = new Set<string>();
@@ -392,6 +422,9 @@ export async function promptModelAllowlist(params: {
     if (aliases?.length) {
       hints.push(`alias: ${aliases.join(", ")}`);
     }
+    if (params.onlyUsable && !hasAuth(entry.provider)) {
+      return;
+    }
     if (!hasAuth(entry.provider)) {
       hints.push("auth missing");
     }
@@ -403,9 +436,14 @@ export async function promptModelAllowlist(params: {
     seen.add(key);
   };
 
-  const filteredCatalog = allowedKeySet
+  let filteredCatalog = allowedKeySet
     ? catalog.filter((entry) => allowedKeySet.has(modelKey(entry.provider, entry.id)))
     : catalog;
+  if (preferredProvider) {
+    filteredCatalog = filteredCatalog.filter(
+      (entry) => normalizeProviderId(entry.provider) === preferredProvider,
+    );
+  }
 
   for (const entry of filteredCatalog) {
     addModelOption(entry);
@@ -413,6 +451,12 @@ export async function promptModelAllowlist(params: {
 
   const supplementalKeys = allowedKeySet ? allowedKeys : existingKeys;
   for (const key of supplementalKeys) {
+    if (!keyMatchesPreferredProvider(key)) {
+      continue;
+    }
+    if (!keyMatchesUsableOnly(key)) {
+      continue;
+    }
     if (seen.has(key)) {
       continue;
     }

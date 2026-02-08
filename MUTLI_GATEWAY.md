@@ -32,6 +32,77 @@ openclaw models list
 openclaw models status
 ```
 
+### 1.1.1 List all available providers/gateways/models
+
+Use these commands:
+
+```bash
+# Runtime-available catalog (provider/model)
+openclaw models list
+
+# Resolved defaults + auth/provider status
+openclaw models status
+
+# Raw configured provider map
+openclaw config get models.providers
+```
+
+Also available by surface:
+
+1. UI: Chat header provider/model dropdowns (loaded from `models.list`)
+2. Skill commands: `/gateway-<provider>` commands are generated from `models.providers`
+
+### 1.1.2 Add / Update / Delete provider-gateway-model
+
+Add provider:
+
+```bash
+openclaw config set models.providers.openai.baseUrl "https://api.openai.com/v1"
+openclaw config set models.providers.openai.apiKey "<OPENAI_API_KEY>"
+```
+
+Add model under provider (replace full provider models array):
+
+```bash
+openclaw config set models.providers.openai.models '[{"id":"gpt-5.2","name":"GPT-5.2","thinkingLevels":["off","low","high"]}]'
+```
+
+Update provider field:
+
+```bash
+openclaw config set models.providers.openai.baseUrl "https://your-gateway.example/v1"
+```
+
+Update models list (recommended: write the full array explicitly):
+
+```bash
+openclaw config set models.providers.openai.models '[{"id":"gpt-5.2","name":"GPT-5.2","thinkingLevels":["off","minimal","low","high"]},{"id":"gpt-4.1","name":"GPT-4.1","thinkingLevels":["off","low"]}]'
+```
+
+Delete provider:
+
+```bash
+openclaw config unset models.providers.openai
+```
+
+Delete model:
+
+1. Read current models array for the provider
+2. Remove the target model entry
+3. Set the filtered array back via `openclaw config set models.providers.<provider>.models '<json-array>'`
+
+Example:
+
+```bash
+openclaw config set models.providers.openai.models '[{"id":"gpt-4.1","name":"GPT-4.1","thinkingLevels":["off","low"]}]'
+```
+
+Notes:
+
+1. `openclaw models list` shows runtime availability; `openclaw config get models.providers` shows configured source.
+2. After add/update/delete, rerun `openclaw models list` and `openclaw models status` to verify.
+3. Deleting a provider removes its generated `/gateway-<provider>` skill command.
+
 ### 1.2 Session Command Usage (Skill Commands)
 
 Gateway skill commands are auto-generated from configured providers:

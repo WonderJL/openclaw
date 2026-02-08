@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 import {
   applyModelAllowlist,
@@ -31,6 +31,17 @@ vi.mock("../agents/model-auth.js", () => ({
   resolveEnvApiKey,
   getCustomProviderApiKey,
 }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  ensureAuthProfileStore.mockReturnValue({
+    version: 1,
+    profiles: {},
+  });
+  listProfilesForProvider.mockReturnValue([]);
+  resolveEnvApiKey.mockReturnValue(undefined);
+  getCustomProviderApiKey.mockReturnValue(undefined);
+});
 
 describe("promptDefaultModel", () => {
   it("filters internal router models from the selection list", async () => {
@@ -136,6 +147,75 @@ describe("promptModelAllowlist", () => {
     const options = multiselect.mock.calls[0]?.[0]?.options ?? [];
     expect(options.map((opt: { value: string }) => opt.value)).toEqual([
       "anthropic/claude-opus-4-5",
+    ]);
+  });
+
+  it("filters options to preferred provider when provided", async () => {
+    loadModelCatalog.mockResolvedValue([
+      {
+        provider: "anthropic",
+        id: "claude-opus-4-5",
+        name: "Claude Opus 4.5",
+      },
+      {
+        provider: "openai-codex",
+        id: "gpt-5.3-codex",
+        name: "GPT-5.3 Codex",
+      },
+      {
+        provider: "openai-codex",
+        id: "gpt-5.2-codex",
+        name: "GPT-5.2 Codex",
+      },
+    ]);
+
+    const multiselect = vi.fn(async () => []);
+    const prompter = makePrompter({ multiselect });
+    const config = { agents: { defaults: {} } } as OpenClawConfig;
+
+    await promptModelAllowlist({
+      config,
+      prompter,
+      preferredProvider: "openai-codex",
+    });
+
+    const options = multiselect.mock.calls[0]?.[0]?.options ?? [];
+    expect(options.map((opt: { value: string }) => opt.value)).toEqual([
+      "openai-codex/gpt-5.3-codex",
+      "openai-codex/gpt-5.2-codex",
+    ]);
+  });
+
+  it("hides auth-missing providers in onlyUsable mode", async () => {
+    loadModelCatalog.mockResolvedValue([
+      {
+        provider: "anthropic",
+        id: "claude-opus-4-5",
+        name: "Claude Opus 4.5",
+      },
+      {
+        provider: "openai-codex",
+        id: "gpt-5.3-codex",
+        name: "GPT-5.3 Codex",
+      },
+    ]);
+    listProfilesForProvider.mockImplementation((_, provider: string) =>
+      provider === "openai-codex" ? ["openai-codex:default"] : [],
+    );
+
+    const multiselect = vi.fn(async () => []);
+    const prompter = makePrompter({ multiselect });
+    const config = { agents: { defaults: {} } } as OpenClawConfig;
+
+    await promptModelAllowlist({
+      config,
+      prompter,
+      onlyUsable: true,
+    });
+
+    const options = multiselect.mock.calls[0]?.[0]?.options ?? [];
+    expect(options.map((opt: { value: string }) => opt.value)).toEqual([
+      "openai-codex/gpt-5.3-codex",
     ]);
   });
 });
